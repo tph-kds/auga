@@ -151,20 +151,32 @@ async def submit_goal(request: GoalRequest, background_tasks: BackgroundTasks):
     """
     workflow_id = f"workflow_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
 
+    # Save initial plan to memory
+    planner = PlannerAgent(memory_system=memory)
+    initial_plan = planner.parse_goal(request.user_input)
+    memory.save_plan(
+        workflow_id=workflow_id,
+        user_input=request.user_input,
+        plan=initial_plan.to_dict(),
+        environment=initial_plan.game_type.value,
+        algorithm=initial_plan.algorithm.value,
+        target_score=initial_plan.target_value
+    )
+
     background_tasks.add_task(run_workflow_background, workflow_id, request)
 
     return WorkflowResponse(
         success=True,
         workflow_id=workflow_id,
         final_output=None,
-        results={"status": "started"},
+        results={"status": "started", "initial_plan": initial_plan.to_dict()},
         error=None
     )
 
 
 @app.get("/status/{workflow_id}", response_model=StatusResponse)
 async def get_status(workflow_id: str):
-    """Get status of a running or completed workflow."""
+    """Legacy polling endpoint for status (deprecated, use SSE)."""
     if workflow_id in workflow_results:
         result = workflow_results[workflow_id]
         return StatusResponse(
@@ -179,6 +191,44 @@ async def get_status(workflow_id: str):
         )
     else:
         raise HTTPException(status_code=404, detail="Workflow not found")
+
+
+@app.get("/status/{workflow_id}/stream")
+async def status_stream(workflow_id: str):
+    """Server-Sent Events stream for real-time workflow status."""
+    import asyncio
+    from fastapi.responses import StreamingResponse
+    
+    async def event_generator():
+        while True:
+            if workflow_id in workflow_results:
+                event = {
+                    "event": "complete",
+                    "data": workflow_results[workflow_id],
+                    "timestamp": datetime.now().isoformat()
+                }
+                yield f"data: {json.dumps(event)}\n\n"
+                break
+            elif workflow_id in active_workflows:
+                status = active_workflows[workflow_id].get_status()
+                event = {
+                    "event": "progress",
+                    "data": status,
+                    "timestamp": datetime.now().isoformat()
+                }
+                yield f"data: {json.dumps(event)}\n\n"
+            else:
+                event = {
+                    "event": "error",
+                    "data": {"message": "Workflow not found"},
+                    "timestamp": datetime.now().isoformat()
+                }
+                yield f"data: {json.dumps(event)}\n\n"
+                break
+            
+            await asyncio.sleep(2)  # Poll every 2s
+    
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @app.post("/train")
@@ -310,11 +360,11 @@ async def execute_tool(request: ToolExecuteRequest):
     return result
 
 
+from backend.services.memory_fixed import memory as memory  # Fixed global instance
+
 @app.get("/plans")
 async def list_plans():
     """List available training plans from memory."""
-    from backend.services.memory import MemorySystem
-    memory = MemorySystem()
     plans = memory.get_recent_plans(limit=10)
     return {"plans": plans}
 
@@ -339,6 +389,23 @@ async def delete_model(model_name: str):
         os.remove(model_path)
         return {"deleted": model_name}
     raise HTTPException(status_code=404, detail="Model not found")
+
+
+@app.get("/models/{model_name}/metadata")
+async def get_model_metadata(model_name: str):
+    """Get metadata for a saved model."""
+    import os
+    import json
+    
+    safe_name = os.path.basename(model_name)
+    meta_path = os.path.join("data/models", safe_name.replace('.zip', '_meta.json'))
+    
+    if os.path.exists(meta_path):
+        with open(meta_path, 'r') as f:
+            metadata = json.load(f)
+        return {"model": safe_name, "metadata": metadata}
+    
+    raise HTTPException(status_code=404, detail="Model metadata not found")
 
 
 @app.get("/models/{model_name}/download")

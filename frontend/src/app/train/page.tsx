@@ -134,7 +134,7 @@ export default function TrainPage() {
                 {preset.description}
               </div>
               <div className="text-xs font-mono">
-                {preset.algorithm} • {preset.timesteps.toLocaleString()} steps
+                {preset.algorithm} • {preset.timesteps} steps
               </div>
             </button>
           ))}

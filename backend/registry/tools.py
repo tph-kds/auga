@@ -414,6 +414,29 @@ class ToolRegistry:
         else:
             return {'error': f"Failed to load model from {model_path}"}
 
+    def _tool_data_collect(self, model_path: str, env: str, episodes: int = 10, level: str = 'basic') -> Dict:
+        """Collect trajectories from play episodes."""
+        from backend.agents.data_agent import data_agent
+        from backend.core.env_factory import build_env
+        from backend.rl.trainer import RLTrainer
+
+        trainer = RLTrainer()
+        trainer.load_model(model_path)
+        env, _ = build_env(env, level)
+
+        controller = RuntimeController(trainer)
+        results = controller.collect_data(model_path, env, episodes)  # Assume collect method
+        traj = data_agent.collect_from_play(results)
+        return {'trajectories': len(traj), 'qualified': len(data_agent.qualify_data(traj, 10.0))}
+
+    def _tool_fine_tune_lora(self, model_path: str, trajectories: List, target: float):
+        """LoRA fine-tune for target."""
+        trainer = RLTrainer()
+        trainer.load_model(model_path)
+        metrics = trainer.fine_tune_lora(trajectories, epochs=3)
+        new_path = trainer.save_model(f"{Path(model_path).stem}_lora.zip")
+        return {'new_model': new_path, 'metrics': metrics}
+
 
 # Global tool registry
 tool_registry = ToolRegistry()

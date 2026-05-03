@@ -11,6 +11,7 @@ import gymnasium as gym
 from stable_baselines3 import PPO, A2C, DQN
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.callbacks import BaseCallback, EvalCallback
+from typing import List
 from stable_baselines3.common.monitor import Monitor
 import numpy as np
 
@@ -352,3 +353,44 @@ class RLTrainer:
         if self.model:
             return self.model.action_space
         return None
+
+    def fine_tune_lora(self, trajectories: List, epochs: int = 3, low_vram: bool = True):
+        """LoRA fine-tune on qualified data (low VRAM PEFT)."""
+        from peft import LoraConfig, get_peft_model
+        from torch.optim import AdamW
+
+        if not self.model:
+            raise ValueError("Load model first.")
+
+        # LoRA config for low VRAM
+        lora_config = LoraConfig(
+            r=16,  # rank
+            lora_alpha=32,
+            target_modules=["policy_net", "value_net"],  # PPO policy/value heads
+            lora_dropout=0.05,
+            bias="none"
+        )
+        self.model.policy = get_peft_model(self.model.policy, lora_config)
+
+        # Data loader from trajectories
+        dataset = self._trajectories_to_dataset(trajectories)
+        
+        # Fine-tune loop
+        optimizer = AdamW(self.model.policy.parameters(), lr=1e-4)
+        for epoch in range(epochs):
+            for batch in dataset:
+                loss = self.model.policy(batch['obs'], batch['actions'], batch['returns'])
+                loss.backward()
+                optimizer.step()
+                optimizer.zero_grad()
+
+        # Merge LoRA
+        self.model.policy = self.model.policy.merge_and_unload()
+        return {'epochs': epochs, 'loss': loss.item()}
+
+    def _trajectories_to_dataset(self, trajectories):
+        """Convert trajectories to training dataset."""
+        # Dummy - implement Dataloader
+        import torch
+        return [{'obs': torch.tensor(t.obs), 'actions': torch.tensor(t.action), 'returns': torch.tensor(t.reward)} for t in trajectories[:1000]]
+

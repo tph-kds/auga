@@ -28,7 +28,7 @@ export default function ModelsPage() {
         algorithm: extractAlgorithm(name),
         environment: extractEnvironment(name),
         created_at: getFileDate(name),
-        size: `${(Math.random() * 50 + 5).toFixed(1)} MB`,
+        size: `${Math.floor(Math.random() * 50 + 5)} MB`,
         tags: [],
       }));
       setModels(modelList);
@@ -54,7 +54,6 @@ export default function ModelsPage() {
   };
 
   const getFileDate = (filename: string): string => {
-    // For demo purposes, return relative time
     const times = ['2 hours ago', '1 day ago', '3 days ago', '1 week ago'];
     return times[Math.floor(Math.random() * times.length)];
   };
@@ -146,65 +145,66 @@ export default function ModelsPage() {
             <Card
               key={model.name}
               hover
-              className="cursor-pointer"
-              onClick={() => setSelectedModel(model)}
+              className="cursor-pointer [&>div]:cursor-pointer"
             >
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center space-x-3">
-                  <FileJson className="h-8 w-8 text-primary-600" />
-                  <div>
-                    <h3 className="font-semibold truncate max-w-[200px]" title={model.name}>
-                      {model.name}
-                    </h3>
-                    <p className="text-xs text-gray-500">{model.size}</p>
+              <div role="button" tabIndex={0} onClick={() => setSelectedModel(model)} onKeyDown={(e) => e.key === 'Enter' && setSelectedModel(model)}>
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center space-x-3">
+                    <FileJson className="h-8 w-8 text-primary-600" />
+                    <div>
+                      <h3 className="font-semibold truncate max-w-[200px]" title={model.name}>
+                        {model.name}
+                      </h3>
+                      <p className="text-xs text-gray-500">{model.size}</p>
+                    </div>
+                  </div>
+                  <div className="flex space-x-1">
+                    <Badge variant={
+                      model.algorithm === 'PPO' ? 'info' :
+                      model.algorithm === 'A2C' ? 'warning' : 'default'
+                    }>
+                      {model.algorithm}
+                    </Badge>
                   </div>
                 </div>
-                <div className="flex space-x-1">
-                  <Badge variant={
-                    model.algorithm === 'PPO' ? 'info' :
-                    model.algorithm === 'A2C' ? 'warning' : 'default'
-                  }>
-                    {model.algorithm}
-                  </Badge>
-                </div>
-              </div>
 
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center text-gray-600 dark:text-gray-400">
-                  <Clock className="h-4 w-4 mr-2" />
-                  {model.created_at}
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center text-gray-600 dark:text-gray-400">
+                    <Clock className="h-4 w-4 mr-2" />
+                    {model.created_at}
+                  </div>
+                  <div className="flex items-center text-gray-600 dark:text-gray-400">
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    {model.environment}
+                  </div>
                 </div>
-                <div className="flex items-center text-gray-600 dark:text-gray-400">
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  {model.environment}
-                </div>
-              </div>
 
-              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex space-x-2">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDownload(model.name);
-                  }}
-                >
-                  <Download className="h-4 w-4 mr-1" />
-                  Download
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDelete(model.name);
-                  }}
-                  isLoading={deleting === model.name}
-                >
-                  <Trash2 className="h-4 w-4 mr-1" />
-                  Delete
-                </Button>
+                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex space-x-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDownload(model.name);
+                    }}
+                  >
+                    <Download className="h-4 w-4 mr-1" />
+                    Download
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(model.name);
+                    }}
+                    isLoading={deleting === model.name}
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Delete
+                  </Button>
+                </div>
               </div>
             </Card>
           ))}
@@ -310,3 +310,4 @@ action, _states = model.predict(obs)`}
     </div>
   );
 }
+

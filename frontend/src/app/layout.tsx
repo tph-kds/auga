@@ -4,6 +4,11 @@ import './globals.css';
 import { AppProvider } from '@/lib/context';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
+import ContentWrapper from '@/components/ContentWrapper';
+import {
+  ToastProvider,
+  ToastViewport,
+} from '@/components/ui/Toast';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -18,18 +23,27 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#3B82F6" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+      </head>
       <body className={inter.className}>
         <AppProvider>
-          <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
-            <Sidebar />
-            <div className="flex-1 flex flex-col overflow-hidden">
-              <Header />
-              <main className="flex-1 overflow-y-auto p-6">
-                {children}
-              </main>
+          <ToastProvider>
+            <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
+              <Sidebar />
+              <ContentWrapper>
+                <Header />
+                <main className="flex-1 overflow-y-auto p-6">
+                  {children}
+                </main>
+              </ContentWrapper>
             </div>
-          </div>
+            <ToastViewport />
+          </ToastProvider>
         </AppProvider>
       </body>
     </html>

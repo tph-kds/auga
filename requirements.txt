@@ -51,5 +51,11 @@ pyyaml>=6.0
 # Optional: Ray for distributed training
 # ray>=2.8.0
 
+# LangChain Community for Ollama LLM
+langchain-community>=0.2.0
+
+# Optional: Ray for distributed training
+# ray>=2.8.0
+
 # Optional: MLflow for experiment tracking
 # mlflow>=2.8.0

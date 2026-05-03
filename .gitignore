@@ -146,6 +146,7 @@ ag_env/*
 frontend/.next/*
 frontend/node_modules/*
 data/*
+.*/*
 
 # markdown files
 *.md

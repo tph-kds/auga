@@ -88,6 +88,14 @@ class PlannerAgent:
     def __init__(self, memory_system=None):
         self.memory = memory_system
         self.logger = logging.getLogger(__name__)
+        try:
+            from langchain_community.llms import Ollama
+            self.llm = Ollama(model="llama3", temperature=0.1)
+            self.llm_available = True
+        except:
+            self.llm = None
+            self.llm_available = False
+            self.logger.warning("Ollama LLM not available - using rule-based fallback")
 
     def parse_goal(self, user_input: str) -> TrainingPlan:
         """
@@ -145,7 +153,16 @@ class PlannerAgent:
 
         # Store in memory if available
         if self.memory:
-            self.memory.store_plan(plan)
+            self.memory.save_plan(
+                workflow_id="parsed_" + str(hash(user_input))[:8],
+                user_input=user_input,
+                plan=plan.to_dict(),
+                environment=plan.game_type.value,
+                algorithm=plan.algorithm.value,
+                target_score=plan.target_value,
+                metrics=None,
+                success=False
+            )
 
         return plan
 

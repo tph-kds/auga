@@ -80,10 +80,10 @@ export default function MonitorPage() {
   }, [workflowStatus, isPaused, currentEpisode]);
 
   const stats = {
-    totalEpisodes: workflowDetails.controller?.total_episodes_played || currentEpisode,
-    bestScore: Math.max(workflowDetails.controller?.best_score || 0, ...progressHistory.map(h => h.score)),
-    bestScoreReal: workflowDetails.controller?.best_score || 0,
-    successRate: (workflowDetails.controller?.success_rate || 0) * 100,
+    totalEpisodes: 0,
+    bestScore: Math.max(0, ...progressHistory.map(h => h.score)),
+    bestScoreReal: 0,
+    successRate: 0,
     avgScore: progressHistory.length > 0
       ? progressHistory.reduce((sum, h) => sum + h.score, 0) / progressHistory.length
       : 0,

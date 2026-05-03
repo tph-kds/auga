@@ -28,6 +28,7 @@ class MemorySystem:
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         engine = create_engine(f'sqlite:///{self.db_path}')
+        Base.metadata.drop_all(engine)
         Base.metadata.create_all(engine)
         self.Session = sessionmaker(bind=engine)
 

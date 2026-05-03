@@ -58,3 +58,10 @@ class WorkflowResponse(BaseModel):
     final_output: Optional[str]
     results: Dict[str, Any]
     error: Optional[str]
+
+
+class SSEStatusEvent(BaseModel):
+    """Event model for Server-Sent Events status stream."""
+    event: str  # "progress", "complete", "error"
+    data: Dict[str, Any]
+    timestamp: str

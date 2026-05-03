@@ -13,15 +13,16 @@ import {
   Activity,
 } from 'lucide-react';
 import Link from 'next/link';
+import { MessageCircle } from 'lucide-react';
 
-export default function Dashboard() {
-  const { workflowDetails, activeWorkflowId, setActiveWorkflowId, workflowStatus, isConnected } = useApp();
+export default function AgentDashboard() {
+  const { workflowDetails, activeWorkflowId, setActiveWorkflowId, workflowStatus, isConnected, recentPlans, models } = useApp();
 
   const stats = {
-    totalEpisodes: workflowDetails.controller?.total_episodes_played || 0,
-    bestScore: workflowDetails.controller?.best_score || 0,
-    successRate: (workflowDetails.controller?.success_rate || 0) * 100,
-    recentScore: workflowDetails.controller?.mean_recent_score || 0,
+    totalTasks: recentPlans?.length || 0,
+    activeAgents: activeWorkflowId ? 1 : 0,
+    totalModels: models?.length || 0,
+    successRate: recentPlans?.filter(p => p.success).length / Math.max(recentPlans?.length || 1, 1) * 100 || 0,
   };
 
   return (
@@ -30,16 +31,16 @@ export default function Dashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            Dashboard
+            AI Agent Dashboard
           </h1>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Monitor your autonomous RL agents
+            Monitor autonomous agents collecting data, training, and achieving your requests
           </p>
         </div>
-        <Link href="/goal">
+        <Link href="/chat">
           <button className="btn-primary flex items-center space-x-2">
-            <Target className="h-5 w-5" />
-            <span>New Goal</span>
+            <MessageCircle className="h-5 w-5" />
+            <span>Chat with Agent</span>
           </button>
         </Link>
       </div>
@@ -85,13 +86,13 @@ export default function Dashboard() {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
-          title="Total Episodes"
-          value={stats.totalEpisodes.toLocaleString()}
+          title="Tasks"
+          value={stats.totalTasks.toString()}
           icon={<Activity className="h-6 w-6 text-primary-600" />}
         />
         <StatCard
-          title="Best Score"
-          value={stats.bestScore.toFixed(1)}
+          title="Active Models"
+          value={stats.totalModels.toString()}
           icon={<Target className="h-6 w-6 text-secondary-600" />}
         />
         <StatCard
@@ -102,8 +103,8 @@ export default function Dashboard() {
           icon={<CheckCircle className="h-6 w-6 text-green-600" />}
         />
         <StatCard
-          title="Current Avg"
-          value={stats.recentScore.toFixed(1)}
+          title="Total Tasks"
+          value={stats.totalTasks.toString()}
           icon={<TrendingUp className="h-6 w-6 text-yellow-600" />}
         />
       </div>
@@ -114,16 +115,16 @@ export default function Dashboard() {
         <Card>
           <h3 className="text-lg font-semibold mb-4 flex items-center">
             <Zap className="h-5 w-5 mr-2 text-primary-600" />
-            Training Progress
+            System Stats
           </h3>
           <div className="space-y-4">
             <div>
               <div className="flex justify-between text-sm mb-1">
-                <span>Goal Progress</span>
-                <span className="font-mono">{Math.min(100, (stats.recentScore / 100) * 100).toFixed(0)}%</span>
+                <span>Tasks Completed</span>
+                <span className="font-mono">{stats.totalTasks}</span>
               </div>
               <ProgressBar
-                value={Math.min(100, stats.recentScore)}
+                value={stats.totalTasks}
                 max={100}
                 showLabel
                 color="primary"
@@ -143,12 +144,12 @@ export default function Dashboard() {
             </div>
             <div>
               <div className="flex justify-between text-sm mb-1">
-                <span>Episode Completion</span>
-                <span className="font-mono">{(stats.totalEpisodes % 100).toFixed(0)}%</span>
+                <span>Models Ready</span>
+                <span className="font-mono">{stats.totalModels}</span>
               </div>
               <ProgressBar
-                value={stats.totalEpisodes % 100}
-                max={100}
+                value={stats.totalModels}
+                max={20}
                 showLabel
                 color="secondary"
               />
