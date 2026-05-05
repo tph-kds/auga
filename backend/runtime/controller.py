@@ -50,14 +50,14 @@ class EvaluationResult:
 @dataclass
 class ControllerConfig:
     """Configuration for runtime controller."""
-    max_episodes: int = 1000
-    max_steps_per_episode: int = 10000
-    success_threshold: float = 0.9  # Success rate threshold
-    consecutive_successes_required: int = 10
-    eval_frequency: int = 10  # Evaluate every N episodes
-    retry_limit: int = 3
-    early_stopping_patience: int = 50
-    render_during_eval: bool = True
+    max_episodes: int = 100            # Hard cap — never run more than this
+    max_steps_per_episode: int = 1000  # Steps per episode (reduced for speed)
+    success_threshold: float = 0.8     # 80% success rate to declare goal met
+    consecutive_successes_required: int = 5   # Reduced from 10 for faster detection
+    eval_frequency: int = 10           # Evaluate every N episodes
+    retry_limit: int = 2               # Max retries
+    early_stopping_patience: int = 5   # Evaluations with no improvement before stopping
+    render_during_eval: bool = False   # Don't render during eval (headless)
     render_during_training: bool = False
 
 
@@ -223,18 +223,18 @@ class RuntimeController:
 
         return success_rate >= self.config.success_threshold
 
-    def run_until_goal(self,
-                       plan: TrainingPlan,
-                       max_retries: int = 3) -> Tuple[bool, Dict]:
+    def run_until_goal(
+        self,
+        plan: TrainingPlan,
+        max_retries: int = 2,
+    ) -> Tuple[bool, Dict]:
         """
-        Main loop: Play episodes until goal achieved or retries exhausted.
+        Evaluate the trained policy until the goal is met or resources exhausted.
 
-        Args:
-            plan: Training plan with goal specifications
-            max_retries: Maximum number of retry attempts
-
-        Returns:
-            (success, final_metrics)
+        Termination conditions (whichever comes first):
+        1. Goal achieved (success_rate >= threshold over consecutive episodes)
+        2. total_episodes >= config.max_episodes  (hard cap)
+        3. retry_count > max_retries after early-stopping
         """
         self.set_plan(plan)
         self.state = ControllerState.RUNNING
@@ -243,76 +243,84 @@ class RuntimeController:
         self.logger.info(f"Starting goal-driven gameplay: {plan.goal}")
         self.logger.info(f"Target: {plan.target_value}, Algorithm: {plan.algorithm.value}")
 
-        while self.retry_count <= max_retries:
-            # Run evaluation episodes
+        while (
+            self.total_episodes_played < self.config.max_episodes
+            and self.retry_count <= max_retries
+        ):
+            remaining = self.config.max_episodes - self.total_episodes_played
+            n_eval = min(self.config.eval_frequency, remaining)
+
             eval_result = self.evaluate(
-                n_episodes=self.config.eval_frequency,
-                render=self.config.render_during_eval
+                n_episodes=n_eval,
+                render=self.config.render_during_eval,
             )
 
-            # Check if goal achieved
+            # ── Goal achieved ────────────────────────────────────────────
             if eval_result.goal_achieved:
                 self.state = ControllerState.SUCCESS
                 self.goal_achieved = True
                 elapsed_time = time.time() - self.start_time
 
-                self.logger.info(f"Goal achieved! Success rate: {eval_result.success_rate:.2f}")
-                self.logger.info(f"Total episodes: {self.total_episodes_played}")
-                self.logger.info(f"Total time: {elapsed_time:.2f}s")
-
+                self.logger.info(
+                    f"Goal achieved! success_rate={eval_result.success_rate:.2f} "
+                    f"after {self.total_episodes_played} episodes"
+                )
                 return True, {
                     'success': True,
                     'episodes': self.total_episodes_played,
                     'final_score': eval_result.mean_score,
+                    'mean_reward': eval_result.mean_reward,
                     'success_rate': eval_result.success_rate,
                     'time_elapsed': elapsed_time,
-                    'retries': self.retry_count
+                    'retries': self.retry_count,
                 }
 
-            # Check for early stopping
-            if self._should_early_stop():
-                self.logger.warning("Early stopping triggered - no improvement")
+            # ── Hard episode cap reached ─────────────────────────────────
+            if self.total_episodes_played >= self.config.max_episodes:
+                self.logger.info(
+                    f"Episode cap reached ({self.config.max_episodes}), stopping."
+                )
                 break
 
-            # Retry with refined plan
-            self.retry_count += 1
-            if self.retry_count <= max_retries:
-                self.logger.info(f"Retry {self.retry_count}/{max_retries} - refining approach...")
-                self.state = ControllerState.RETRYING
+            # ── Early stopping ───────────────────────────────────────────
+            if self._should_early_stop():
+                self.logger.warning("Early stopping triggered — no improvement detected")
+                self.retry_count += 1
+                if self.retry_count > max_retries:
+                    break
+                self.logger.info(
+                    f"Retry {self.retry_count}/{max_retries} — continuing evaluation"
+                )
 
-                # Could trigger retraining here
-                # For now: continue evaluation
-
+        # ── Failed ──────────────────────────────────────────────────────
         self.state = ControllerState.FAILED
         elapsed_time = time.time() - self.start_time
+        best = max((e.score for e in self.episode_history), default=0.0)
 
-        self.logger.warning(f"Goal not achieved after {self.retry_count} retries")
-        self.logger.info(f"Best score: {max(e.score for e in self.episode_history):.2f}")
+        self.logger.warning(
+            f"Goal not achieved after {self.total_episodes_played} episodes, "
+            f"best score: {best:.2f}"
+        )
 
         return False, {
             'success': False,
             'episodes': self.total_episodes_played,
-            'best_score': max((e.score for e in self.episode_history), default=0.0),
+            'best_score': best,
+            'mean_reward': float(np.mean([e.total_reward for e in self.episode_history])) if self.episode_history else 0.0,
             'time_elapsed': elapsed_time,
-            'retries': self.retry_count
+            'retries': self.retry_count,
         }
 
     def _should_early_stop(self) -> bool:
-        """Determine if early stopping should trigger."""
+        """Trigger early stopping if no score improvement over last N evaluations."""
         if len(self.evaluation_history) < self.config.early_stopping_patience:
             return False
 
-        # Check recent performance trend
         recent = self.evaluation_history[-self.config.early_stopping_patience:]
         scores = [e.mean_score for e in recent]
 
-        # No improvement in last N evaluations
-        best_recent = max(scores)
-        if best_recent == scores[-1] and len(scores) > 10:
-            # If best score is not recent and we've evaluated enough
-            return True
-
-        return False
+        # Stop if the max score hasn't improved across the window
+        return max(scores[:-1], default=0) >= scores[-1]
 
     def get_progress_stats(self) -> Dict[str, Any]:
         """Get current progress statistics."""

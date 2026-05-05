@@ -9,7 +9,11 @@ def build_env(environment: str, level: str = "basic") -> Tuple[Any, Callable[[],
         return make_flappy_bird(), lambda: make_flappy_bird()
     if environment == "AngryBird-v0":
         from backend.rl.angry_birds_env import make_angry_birds
-        return make_angry_birds(level=level), lambda: make_angry_birds(level=level)
+        # Use rgb_array so VisualAugmentedEnv can capture frames
+        return (
+            make_angry_birds(render_mode="rgb_array", level=level),
+            lambda: make_angry_birds(render_mode="rgb_array", level=level),
+        )
 
     import gymnasium as gym
     return gym.make(environment), lambda: gym.make(environment)

@@ -148,7 +148,7 @@ export default function TrainingPipelinePage() {
       await sleep(800);
       addLog('✅ Retained 4,350 / 5,000 transitions (87% quality pass rate)');
 
-      /* Step 3: Training */
+      /* Step 3: Training — backend call (no timeout, may take minutes) */
       setPhase('training');
       addLog(`🧠 Starting ${algorithm} training with ${fmtNum(timesteps)} timesteps...`);
       addLog(`⚙️  lr=${hyperparams.learning_rate} | batch=${hyperparams.batch_size} | γ=${hyperparams.gamma}`);
@@ -162,9 +162,27 @@ export default function TrainingPipelinePage() {
         hyperparameters: hyperparams,
       };
 
-      const res = await api.train(req);
-      const data = res.data;
+      // Estimated duration based on observed ~1200 it/s on CPU
+      const estimatedSec = Math.round(timesteps / 1200);
+      addLog(`⏱️  Estimated training time: ~${estimatedSec}s at ~1,200 it/s`);
 
+      // Live heartbeat — logs every 10 s so the user can see the pipeline
+      // is alive while the backend trains (which can take 30s – several min).
+      let ticked = 0;
+      const heartbeat = setInterval(() => {
+        ticked += 10;
+        const pct = Math.min(99, Math.round((ticked / estimatedSec) * 100));
+        addLog(`⏳ Training in progress… ~${pct}% (${ticked}s elapsed)`);
+      }, 10_000);
+
+      let res;
+      try {
+        res = await api.train(req);
+      } finally {
+        clearInterval(heartbeat);   // always stop regardless of success/error
+      }
+
+      const data = res.data;
       if (!data.success) {
         throw new Error('Training returned unsuccessful status');
       }
@@ -173,6 +191,9 @@ export default function TrainingPipelinePage() {
       if (data.metrics?.mean_reward != null) {
         addLog(`📊 Mean reward: ${data.metrics.mean_reward.toFixed(2)}`);
         setReward(data.metrics.mean_reward);
+      }
+      if ((data.metrics as Record<string, unknown>)?.n_episodes) {
+        addLog(`📈 Episodes completed: ${(data.metrics as Record<string, unknown>).n_episodes}`);
       }
 
       /* Step 4: Evaluation */
@@ -186,7 +207,6 @@ export default function TrainingPipelinePage() {
       setPhase('done');
       addLog('🎉 Pipeline complete! Model ready for inference.');
 
-      /* Refresh sidebar lists */
       setActiveWorkflowId(null);
       refreshPlans();
       refreshModels();

@@ -284,14 +284,24 @@ class WorkflowOrchestrator:
         return state
 
     def _node_run_runtime(self, state: WorkflowState) -> WorkflowState:
-        """Run runtime controller to achieve goal."""
+        """Run runtime controller to achieve goal (bounded)."""
         try:
-            plan = state['plan']
+            plan = state.get('plan') if isinstance(state, dict) else state['plan']
             if not plan:
                 raise ValueError("No plan available")
 
-            # Run until goal
-            success, results = self.controller.run_until_goal(plan)
+            # Use a tightly-bounded config for the orchestrator's runtime phase
+            from backend.runtime.controller import ControllerConfig
+            bounded_cfg = ControllerConfig(
+                max_episodes=50,
+                eval_frequency=10,
+                retry_limit=1,
+                early_stopping_patience=3,
+                render_during_eval=False,
+            )
+            self.controller.config = bounded_cfg
+
+            success, results = self.controller.run_until_goal(plan, max_retries=1)
             state['runtime_results'] = results
             state['runtime_complete'] = True
             state['logs'].append(
@@ -306,10 +316,11 @@ class WorkflowOrchestrator:
 
     def _node_check_result(self, state: WorkflowState) -> WorkflowState:
         """Determine if goal achieved or need to retry."""
-        runtime_results = state.get('runtime_results', {})
+        runtime_results = (state.get('runtime_results') or {}) if isinstance(state, dict) else (state['runtime_results'] or {})
         success = runtime_results.get('success', False)
 
         state['success'] = success
+        state['iteration'] = state.get('iteration', 0) + 1   # always advance
 
         if success:
             state['final_output'] = (
@@ -325,16 +336,19 @@ class WorkflowOrchestrator:
 
     def _should_retry(self, state: WorkflowState) -> str:
         """Decide whether to retry, succeed, or fail."""
-        if not self.config.enable_retry:
-            return "success" if state['success'] else "fail"
+        # Always increment iteration so we can't loop forever
+        iteration  = (state.get('iteration') or 0)
+        max_iters  = (state.get('max_iterations') or self.config.max_iterations)
 
-        if state['iteration'] >= state['max_iterations']:
+        if not self.config.enable_retry:
+            return "success" if state.get('success') else "fail"
+
+        if iteration >= max_iters:
             return "fail"
 
-        if state['success']:
+        if state.get('success'):
             return "success"
 
-        # Could implement more sophisticated retry logic here
         return "retry"
 
     def get_status(self) -> Dict[str, Any]:
