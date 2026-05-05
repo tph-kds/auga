@@ -1,4 +1,11 @@
-"""
-Services layer for cross-cutting concerns like memory, validation, monitoring.
-"""
+# Services package
+from .memory import MemorySystem, memory
+from .validation import SafetyValidator, ValidationResult, HookManager
 
+__all__ = [
+    'MemorySystem',
+    'memory',
+    'SafetyValidator',
+    'ValidationResult',
+    'HookManager',
+]

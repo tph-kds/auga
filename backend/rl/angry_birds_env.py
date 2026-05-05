@@ -412,14 +412,16 @@ class AngryBirdsEnv(gym.Env):
         """Draw current frame."""
         import pygame
 
-        self.screen.fill((135, 206, 235))  # Sky blue
-
-        # Draw ground
-        pygame.draw.rect(
-            self.screen,
-            (139, 115, 85),
-            (0, self.world_height - 50, self.world_width, 50)
-        )
+        if hasattr(self, 'assets') and 'bg' in self.assets:
+            self.screen.blit(self.assets['bg'], (0, 0))
+        else:
+            self.screen.fill((135, 206, 235))  # Sky blue
+            # Draw ground
+            pygame.draw.rect(
+                self.screen,
+                (139, 115, 85),
+                (0, self.world_height - 50, self.world_width, 50)
+            )
 
         # Draw slingshot
         slingshot_rect = pygame.Rect(
@@ -452,35 +454,41 @@ class AngryBirdsEnv(gym.Env):
         for pig in self.pigs:
             if not pig.alive:
                 continue
-            color = (255, 182, 193)  # Pink
-            pygame.draw.circle(
-                self.screen,
-                color,
-                (int(pig.x), int(pig.y)),
-                int(pig.radius)
-            )
-            # Pig nose
-            pygame.draw.circle(
-                self.screen,
-                (255, 105, 180),
-                (int(pig.x), int(pig.y)),
-                5
-            )
+            if hasattr(self, 'assets') and 'pig' in self.assets:
+                self.screen.blit(self.assets['pig'], (int(pig.x - pig.radius), int(pig.y - pig.radius)))
+            else:
+                color = (255, 182, 193)  # Pink
+                pygame.draw.circle(
+                    self.screen,
+                    color,
+                    (int(pig.x), int(pig.y)),
+                    int(pig.radius)
+                )
+                # Pig nose
+                pygame.draw.circle(
+                    self.screen,
+                    (255, 105, 180),
+                    (int(pig.x), int(pig.y)),
+                    5
+                )
 
         # Draw current bird at slingshot or in flight
         if self.current_bird.active:
-            bird_color = {
-                'red': (255, 0, 0),
-                'yellow': (255, 255, 0),
-                'blue': (0, 0, 255),
-                'black': (0, 0, 0),
-            }.get(self.current_bird.type, (255, 0, 0))
-            pygame.draw.circle(
-                self.screen,
-                bird_color,
-                (int(self.current_bird.x), int(self.current_bird.y)),
-                int(self.current_bird.radius)
-            )
+            if hasattr(self, 'assets') and 'red_bird' in self.assets:
+                self.screen.blit(self.assets['red_bird'], (int(self.current_bird.x - self.current_bird.radius), int(self.current_bird.y - self.current_bird.radius)))
+            else:
+                bird_color = {
+                    'red': (255, 0, 0),
+                    'yellow': (255, 255, 0),
+                    'blue': (0, 0, 255),
+                    'black': (0, 0, 0),
+                }.get(self.current_bird.type, (255, 0, 0))
+                pygame.draw.circle(
+                    self.screen,
+                    bird_color,
+                    (int(self.current_bird.x), int(self.current_bird.y)),
+                    int(self.current_bird.radius)
+                )
 
         # Draw score
         font = pygame.font.Font(None, 36)
@@ -490,11 +498,27 @@ class AngryBirdsEnv(gym.Env):
 
     def _init_render(self):
         import pygame
+        import os
         pygame.init()
         pygame.display.init()
         self.screen = pygame.display.set_mode((self.world_width, self.world_height))
         pygame.display.set_caption("Angry Birds RL")
         self.clock = pygame.time.Clock()
+        
+        # Load realistic assets
+        self.assets = {}
+        try:
+            assets_dir = os.path.join(os.path.dirname(__file__), '..', 'assets')
+            bg = pygame.image.load(os.path.join(assets_dir, 'bg.png')).convert()
+            self.assets['bg'] = pygame.transform.scale(bg, (self.world_width, self.world_height))
+            
+            for name, size in [('red_bird', 30), ('pig', 24)]:
+                img = pygame.image.load(os.path.join(assets_dir, f'{name}.png')).convert_alpha()
+                # Treat white as transparent
+                img.set_colorkey((255, 255, 255))
+                self.assets[name] = pygame.transform.scale(img, (size, size))
+        except Exception as e:
+            print(f"Failed to load assets: {e}")
 
     def close(self):
         if self.screen is not None:

@@ -70,7 +70,11 @@ class RLTrainer:
     def validate_environment(self, env) -> Tuple[bool, str]:
         """Validate that environment is compatible with SB3."""
         try:
-            check_env(env, warn=True, skip_render_check=True)
+            # Unwrap to reach the base gymnasium.Env for check_env
+            base_env = env
+            while hasattr(base_env, 'env'):
+                base_env = base_env.env
+            check_env(base_env, warn=True, skip_render_check=True)
             return True, "Environment is valid"
         except Exception as e:
             return False, str(e)
@@ -80,18 +84,30 @@ class RLTrainer:
         env,
         env_id: Optional[str] = None,
         env_factory: Optional[Callable[[], Any]] = None,
+        visual_augment: bool = True,
     ) -> None:
         """Attach an environment and optional factory to the trainer."""
-        self.env = Monitor(env, self.log_dir)
+        if visual_augment:
+            try:
+                from backend.services.visual_features import VisualAugmentedEnv
+                # Only wrap if not already wrapped to avoid double-wrapping
+                if not isinstance(env, VisualAugmentedEnv):
+                    env = VisualAugmentedEnv(env)
+                if env_factory:
+                    _fac = env_factory
+                    env_factory = lambda: VisualAugmentedEnv(_fac())
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Visual augmentation unavailable: {e}")
 
+        self.env = Monitor(env, self.log_dir)
         resolved_env_id = env_id or getattr(getattr(env, "spec", None), "id", None)
         self.env_factory = env_factory
-
         if self.env_factory is None and resolved_env_id:
             self.env_factory = lambda: gym.make(resolved_env_id)
-
         env_label = resolved_env_id or env.__class__.__name__
         self.config = {**self.config, 'environment': env_label}
+
 
     def create_model(self,
                      env,
@@ -114,14 +130,7 @@ class RLTrainer:
             return False, f"Unsupported algorithm: {algorithm}"
 
         resolved_env_id = env_id or getattr(getattr(env, "spec", None), "id", None)
-        self.env_factory = env_factory
-
-        if self.env_factory is None:
-            if resolved_env_id:
-                self.env_factory = lambda: gym.make(resolved_env_id)
-            else:
-                env_cls = env.__class__
-                self.env_factory = lambda: env_cls()
+        self.attach_env(env, env_id=resolved_env_id, env_factory=env_factory, visual_augment=True)
 
         # Default configurations
         default_configs = {
@@ -176,7 +185,10 @@ class RLTrainer:
 
         try:
             algo_class = self.ALGORITHMS[algorithm]
-            self.env = Monitor(env, self.log_dir)
+            # self.env is already set by self.attach_env()
+            # Use CPU by default for low VRAM support (override via config)
+            if 'device' not in algo_config:
+                algo_config['device'] = 'cpu'
             self.model = algo_class(env=self.env, **algo_config)
             return True, f"Created {algorithm} model"
         except Exception as e:
@@ -354,43 +366,12 @@ class RLTrainer:
             return self.model.action_space
         return None
 
-    def fine_tune_lora(self, trajectories: List, epochs: int = 3, low_vram: bool = True):
-        """LoRA fine-tune on qualified data (low VRAM PEFT)."""
-        from peft import LoraConfig, get_peft_model
-        from torch.optim import AdamW
-
-        if not self.model:
-            raise ValueError("Load model first.")
-
-        # LoRA config for low VRAM
-        lora_config = LoraConfig(
-            r=16,  # rank
-            lora_alpha=32,
-            target_modules=["policy_net", "value_net"],  # PPO policy/value heads
-            lora_dropout=0.05,
-            bias="none"
-        )
-        self.model.policy = get_peft_model(self.model.policy, lora_config)
-
-        # Data loader from trajectories
-        dataset = self._trajectories_to_dataset(trajectories)
-        
-        # Fine-tune loop
-        optimizer = AdamW(self.model.policy.parameters(), lr=1e-4)
-        for epoch in range(epochs):
-            for batch in dataset:
-                loss = self.model.policy(batch['obs'], batch['actions'], batch['returns'])
-                loss.backward()
-                optimizer.step()
-                optimizer.zero_grad()
-
-        # Merge LoRA
-        self.model.policy = self.model.policy.merge_and_unload()
-        return {'epochs': epochs, 'loss': loss.item()}
-
-    def _trajectories_to_dataset(self, trajectories):
-        """Convert trajectories to training dataset."""
-        # Dummy - implement Dataloader
-        import torch
-        return [{'obs': torch.tensor(t.obs), 'actions': torch.tensor(t.action), 'returns': torch.tensor(t.reward)} for t in trajectories[:1000]]
+    def get_training_summary(self) -> Dict[str, Any]:
+        """Get a summary of the current training state."""
+        return {
+            'model_loaded': self.model is not None,
+            'config': self.config,
+            'training_metrics': self.training_metrics,
+            'model_dir': self.model_dir,
+        }
 

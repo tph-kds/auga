@@ -383,6 +383,23 @@ Memory System (persist)
 
 ---
 
+## Development Environment Setup
+
+```bash
+# 1. Make connecting private env
+conda activate ag_env/ 
+
+# 2. Test API Backend
+uvicorn backend.api.main:app --reload
+
+# 3. Try curl commands
+# 4. Commit with meaningful message
+```
+
+---
+
+
+
 ## Development Workflow
 
 ```bash

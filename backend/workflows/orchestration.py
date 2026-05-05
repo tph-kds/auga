@@ -204,21 +204,23 @@ class WorkflowOrchestrator:
             if not plan:
                 raise ValueError("No training plan available")
 
-            # Import appropriate environment
-            if plan.game_type.value == "FlappyBird-v0":
-                from backend.rl.environments import make_flappy_bird
-                env = make_flappy_bird()
-            else:
-                import gymnasium as gym
-                env = gym.make(plan.game_type.value)
+            # Use the canonical factory for all environments
+            from backend.core.env_factory import build_env
+            level = plan.metadata.get('level', 'basic')
+            env, env_factory = build_env(plan.game_type.value, level=level)
 
             # Validate environment
             valid, msg = self.trainer.validate_environment(env)
             if not valid:
                 raise ValueError(f"Environment validation failed: {msg}")
 
-            # Setup trainer with environment
-            self.trainer.env = env
+            # Setup trainer with environment and factory
+            self.trainer.attach_env(
+                env,
+                env_id=plan.game_type.value,
+                env_factory=env_factory,
+                visual_augment=True,
+            )
             state['logs'].append(f"Created environment: {plan.game_type.value}")
 
         except Exception as e:

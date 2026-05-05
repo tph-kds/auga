@@ -415,28 +415,45 @@ class ToolRegistry:
             return {'error': f"Failed to load model from {model_path}"}
 
     def _tool_data_collect(self, model_path: str, env: str, episodes: int = 10, level: str = 'basic') -> Dict:
-        """Collect trajectories from play episodes."""
+        """Collect trajectory data from play episodes."""
+        trainer = RLTrainer()
+        if not trainer.load_model(model_path):
+            return {'error': f"Failed to load model from {model_path}"}
+
+        environment, env_factory = build_env(env, level)
+        trainer.attach_env(environment, env_id=env, env_factory=env_factory)
+
+        # Collect episodes
+        episode_data = []
+        for _ in range(episodes):
+            obs, _ = trainer.env.reset()
+            observations, actions, rewards, dones = [obs], [], [], []
+            done = False
+            while not done:
+                action, _ = trainer.predict(obs)
+                obs, reward, done, _, info = trainer.env.step(action)
+                observations.append(obs)
+                actions.append(action)
+                rewards.append(reward)
+                dones.append(done)
+            episode_data.append({
+                'observations': observations,
+                'actions': actions,
+                'rewards': rewards,
+                'dones': dones,
+                'infos': [{}] * len(rewards),
+            })
+
         from backend.agents.data_agent import data_agent
-        from backend.core.env_factory import build_env
-        from backend.rl.trainer import RLTrainer
-
-        trainer = RLTrainer()
-        trainer.load_model(model_path)
-        env, _ = build_env(env, level)
-
-        controller = RuntimeController(trainer)
-        results = controller.collect_data(model_path, env, episodes)  # Assume collect method
-        traj = data_agent.collect_from_play(results)
-        return {'trajectories': len(traj), 'qualified': len(data_agent.qualify_data(traj, 10.0))}
-
-    def _tool_fine_tune_lora(self, model_path: str, trajectories: List, target: float):
-        """LoRA fine-tune for target."""
-        trainer = RLTrainer()
-        trainer.load_model(model_path)
-        metrics = trainer.fine_tune_lora(trajectories, epochs=3)
-        new_path = trainer.save_model(f"{Path(model_path).stem}_lora.zip")
-        return {'new_model': new_path, 'metrics': metrics}
+        trajectories = data_agent.collect_from_episodes(episode_data)
+        qualified = data_agent.qualify_data(trajectories)
+        return {
+            'total_transitions': len(trajectories),
+            'qualified_transitions': len(qualified),
+            'statistics': data_agent.get_statistics(),
+        }
 
 
 # Global tool registry
 tool_registry = ToolRegistry()
+

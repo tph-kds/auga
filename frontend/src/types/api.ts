@@ -157,6 +157,12 @@ export interface PlanResponse {
   constraints: string[];
   hyperparameters: Record<string, number | string>;
   metadata: Record<string, unknown>;
+  // Fields returned by /plans endpoint
+  success?: boolean;
+  user_input?: string;
+  environment?: string;
+  workflow_id?: string;
+  created_at?: string;
 }
 
 // Angry Birds Specific Types

@@ -4,9 +4,10 @@ Project Configuration: Central config for the autonomous RL agent system.
 import os
 from dataclasses import dataclass, asdict
 from typing import Optional
+from pathlib import Path
 
 # Base paths
-PROJECT_ROOT = Path(__file__).parent.parent
+PROJECT_ROOT = Path(__file__).parent
 DATA_DIR = PROJECT_ROOT / "data"
 MODELS_DIR = DATA_DIR / "models"
 LOGS_DIR = DATA_DIR / "logs"
@@ -34,6 +35,7 @@ class TrainerConfig:
     eval_frequency: int = 10000
     n_eval_episodes: int = 10
     verbose: int = 1
+    device: str = "cpu"  # Default CPU for low VRAM
 
 
 @dataclass
@@ -74,15 +76,27 @@ class APIConfig:
 @dataclass
 class SystemConfig:
     """Main system configuration."""
-    database: DatabaseConfig = DatabaseConfig()
-    trainer: TrainerConfig = TrainerConfig()
-    controller: ControllerConfig = ControllerConfig()
-    safety: SafetyConfig = SafetyConfig()
-    api: APIConfig = APIConfig()
+    database: DatabaseConfig = None
+    trainer: TrainerConfig = None
+    controller: ControllerConfig = None
+    safety: SafetyConfig = None
+    api: APIConfig = None
 
     log_level: str = "INFO"
     enable_monitoring: bool = True
     checkpoint_interval: int = 10000
+
+    def __post_init__(self):
+        if self.database is None:
+            self.database = DatabaseConfig()
+        if self.trainer is None:
+            self.trainer = TrainerConfig()
+        if self.controller is None:
+            self.controller = ControllerConfig()
+        if self.safety is None:
+            self.safety = SafetyConfig()
+        if self.api is None:
+            self.api = APIConfig()
 
 
 # Global config instance

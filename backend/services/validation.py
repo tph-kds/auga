@@ -35,6 +35,11 @@ class ValidationResult:
     severity: str = "error"  # error, warning, info
     metadata: Dict[str, Any] = None
 
+    @property
+    def is_valid(self) -> bool:
+        """Alias for valid — for clean property access."""
+        return self.valid
+
 
 class SafetyValidator:
     """
@@ -106,7 +111,7 @@ class SafetyValidator:
 
         # Validate environment name
         allowed_envs = [
-            'CartPole-v1', 'FlappyBird-v0', 'Pong-v0', 'Breakout-v0'
+            'CartPole-v1', 'FlappyBird-v0', 'AngryBird-v0', 'Pong-v0', 'Breakout-v0'
         ]
         if config['environment'] not in allowed_envs:
             return ValidationResult(
@@ -145,6 +150,11 @@ class SafetyValidator:
                     )
 
         return ValidationResult(True, "Config valid")
+
+    # Alias for backward compatibility
+    def validate_training_config(self, config: Dict) -> ValidationResult:
+        """Alias for validate_config."""
+        return self.validate_config(config)
 
     def validate_code_snippet(self, code: str) -> ValidationResult:
         """

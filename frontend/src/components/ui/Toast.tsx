@@ -142,6 +142,5 @@ ToastContent.displayName = ToastContent.displayName
 export {
   type ToastProps,
   type ToastActionElement,
-  type ToastContentProps,
 }
 export { ToastProvider, ToastViewport, ToastTitle, ToastDescription, ToastClose, ToastAction }
