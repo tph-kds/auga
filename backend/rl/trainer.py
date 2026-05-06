@@ -180,6 +180,11 @@ class RLTrainer:
         if config:
             algo_config.update(config)
 
+        # Optimize via Resource Controller
+        from backend.agents.resource_controller import ResourceController
+        rc = ResourceController()
+        algo_config = rc.optimize_config(algorithm, algo_config)
+
         env_label = resolved_env_id or env.__class__.__name__
         self.config = {'algorithm': algorithm, 'environment': env_label, **algo_config}
 
@@ -273,7 +278,12 @@ class RLTrainer:
 
             while not done:
                 action, _states = self.model.predict(obs, deterministic=deterministic)
-                obs, reward, done, _, info = env.step(action)
+                step_result = env.step(action)
+                if len(step_result) == 5:
+                    obs, reward, terminated, truncated, info = step_result
+                    done = terminated or truncated
+                else:
+                    obs, reward, done, info = step_result
                 total_reward += reward
                 steps += 1
 
@@ -298,6 +308,8 @@ class RLTrainer:
         if filename is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"{self.config.get('algorithm', 'model')}_{timestamp}.zip"
+        elif not filename.endswith('.zip'):
+            filename += '.zip'
 
         model_path = os.path.join(self.model_dir, filename)
         self.model.save(model_path)

@@ -227,107 +227,108 @@ class AngryBirdsEnv(gym.Env):
         bird_types = ['red', 'yellow', 'blue', 'black']
         bird_type = bird_types[int(bird_type_idx) % len(bird_types)]
 
-        # If bird is at slingshot, launch it
-        if self.current_bird.active and self.current_bird.x == self.slingshot_x:
-            speed = 10 + power * 15  # 10-25 units
-            self.current_bird.vx = math.cos(angle_rad) * speed
-            self.current_bird.vy = -math.sin(angle_rad) * speed  # Negative because screen Y goes down
-            self.current_bird.type = bird_type
-            self.trajectory = [(self.current_bird.x, self.current_bird.y)]
+        # Set initial launch velocity at the slingshot
+        speed = 10 + power * 15  # 10-25 units
+        self.current_bird.vx = math.cos(angle_rad) * speed
+        self.current_bird.vy = -math.sin(angle_rad) * speed  # Negative because screen Y goes down
+        self.current_bird.type = bird_type
+        self.trajectory = [(self.current_bird.x, self.current_bird.y)]
 
-        # Update bird physics
-        self.current_bird.update(gravity=self.gravity)
-        self.trajectory.append((self.current_bird.x, self.current_bird.y))
+        # Simulate bird flight trajectory internally until inactive (turn-based launch)
+        total_launch_reward = 0.0
+        flight_ticks = 0
+        
+        while self.current_bird.active and flight_ticks < 500:
+            flight_ticks += 1
+            
+            # Update bird physics
+            self.current_bird.update(gravity=self.gravity)
+            self.trajectory.append((self.current_bird.x, self.current_bird.y))
 
-        # Check collisions
-        reward = 0.0
-        collision_occurred = False
+            collision_occurred = False
 
-        # Bird vs ground
-        if self.current_bird.y > self.world_height - 50:  # Ground level
-            self.current_bird.active = False
-            collision_occurred = True
-
-        # Bird vs structures
-        for block in self.blocks:
-            if block.destroyed:
-                continue
-            if self._check_circle_rect_collision(self.current_bird, block):
-                # Apply damage based on bird type and speed
-                speed = math.sqrt(self.current_bird.vx**2 + self.current_bird.vy**2)
-                damage = speed * 0.5
-
-                # Yellow birds do extra damage
-                if self.current_bird.type == 'yellow':
-                    damage *= 1.5
-                # Black birds explode (area damage)
-                elif self.current_bird.type == 'black':
-                    damage *= 3.0
-
-                block.take_damage(damage)
-                self.total_damage += damage
-                reward += damage * 0.01
-
-                # Reflect velocity (simplified)
-                self.current_bird.vx *= -0.5
-                self.current_bird.vy *= -0.5
-
-                if block.destroyed:
-                    reward += 10.0
-
-                collision_occurred = True
-
-        # Bird vs pigs
-        for pig in self.pigs:
-            if not pig.alive:
-                continue
-            if self._check_circle_circle_collision(self.current_bird, pig):
-                speed = math.sqrt(self.current_bird.vx**2 + self.current_bird.vy**2)
-                damage = speed * 0.8
-                pig.take_damage(damage)
-                reward += 20.0
-
-                if not pig.alive:
-                    self.pigs_killed += 1
-                    reward += 50.0  # Bonus for killing pig
-
+            # Bird vs ground
+            if self.current_bird.y > self.world_height - 50:  # Ground level
                 self.current_bird.active = False
                 collision_occurred = True
 
-        # Bird out of bounds
-        if (self.current_bird.x < 0 or self.current_bird.x > self.world_width or
-            self.current_bird.y < 0):
-            self.current_bird.active = False
-            collision_occurred = True
+            # Bird vs structures
+            for block in self.blocks:
+                if block.destroyed:
+                    continue
+                if self._check_circle_rect_collision(self.current_bird, block):
+                    # Apply damage based on bird type and speed
+                    speed_val = math.sqrt(self.current_bird.vx**2 + self.current_bird.vy**2)
+                    damage = speed_val * 0.5
 
-        # Step penalty (encourage efficiency)
-        reward -= 0.1
+                    if self.current_bird.type == 'yellow':
+                        damage *= 1.5
+                    elif self.current_bird.type == 'black':
+                        damage *= 3.0
 
-        # Check if bird stopped
-        if collision_occurred or not self.current_bird.active:
-            # Next bird
-            self.birds_remaining -= 1
-            self.current_bird_index += 1
+                    block.take_damage(damage)
+                    self.total_damage += damage
+                    total_launch_reward += damage * 0.01
 
-            if self.birds_remaining > 0:
-                # Spawn new bird at slingshot
-                self.current_bird = Bird(x=self.slingshot_x, y=self.slingshot_y)
-            else:
-                # No birds left - episode ends
-                self.done = True
+                    # Reflect velocity (simplified)
+                    self.current_bird.vx *= -0.5
+                    self.current_bird.vy *= -0.5
+
+                    if block.destroyed:
+                        total_launch_reward += 10.0
+
+                    collision_occurred = True
+
+            # Bird vs pigs
+            for pig in self.pigs:
+                if not pig.alive:
+                    continue
+                if self._check_circle_circle_collision(self.current_bird, pig):
+                    speed_val = math.sqrt(self.current_bird.vx**2 + self.current_bird.vy**2)
+                    damage = speed_val * 0.8
+                    pig.take_damage(damage)
+                    total_launch_reward += 20.0
+
+                    if not pig.alive:
+                        self.pigs_killed += 1
+                        total_launch_reward += 50.0  # Bonus for killing pig
+
+                    self.current_bird.active = False
+                    collision_occurred = True
+
+            # Bird out of bounds
+            if (self.current_bird.x < 0 or self.current_bird.x > self.world_width or
+                self.current_bird.y < 0):
+                self.current_bird.active = False
+                collision_occurred = True
+
+            # Check if bird stopped
+            if collision_occurred or not self.current_bird.active:
+                self.current_bird.active = False
+                break
+
+        # Step penalty (encourage efficiency per launch)
+        total_launch_reward -= 1.0
+
+        # Next bird transition
+        self.birds_remaining -= 1
+        self.current_bird_index += 1
+
+        if self.birds_remaining > 0 and not all(not pig.alive for pig in self.pigs):
+            # Spawn new bird at slingshot for next step
+            self.current_bird = Bird(x=self.slingshot_x, y=self.slingshot_y)
+        else:
+            # No birds left or all pigs dead - episode ends
+            self.done = True
 
         # Check win condition
         if all(not pig.alive for pig in self.pigs):
-            reward += 100.0  # Big bonus for clearing level
+            total_launch_reward += 100.0  # Big bonus for clearing level
             self.done = True
 
-        # Max steps
-        if self.steps >= 1000:
-            self.done = True
+        self.episode_reward += total_launch_reward
 
-        self.episode_reward += reward
-
-        return self._get_observation(), reward, self.done, False, {
+        return self._get_observation(), total_launch_reward, self.done, False, {
             'score': self.pigs_killed * 100 + int(self.total_damage),
             'pigs_remaining': sum(1 for p in self.pigs if p.alive),
             'birds_remaining': self.birds_remaining,

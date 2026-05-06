@@ -127,13 +127,16 @@ class TestMetricsCallback:
         """Test that callback records training metrics."""
         from stable_baselines3.common.env_checker import check_env
         import gymnasium as gym
+        from types import SimpleNamespace
 
         env = gym.make("CartPole-v1")
         callback = MetricsCallback()
+        callback.model = SimpleNamespace(ep_info_buffer=[{'r': 1.0, 'l': 10}], num_timesteps=10)
+        callback.num_timesteps = 10
 
         # Simulate some steps
         for i in range(10):
-            callback.update_locals(locals())
+            callback.update_locals({'total_timesteps': 100})
             callback.on_step()
 
         assert len(callback.metrics['timesteps']) > 0

@@ -1,6 +1,8 @@
 'use client';
 import { useState } from 'react';
-import PhaserGame from './PhaserGame';
+import dynamic from 'next/dynamic';
+
+const PhaserGame = dynamic(() => import('./PhaserGame'), { ssr: false });
 import { useApp } from '@/lib/context';
 
 export default function AgentStream() {

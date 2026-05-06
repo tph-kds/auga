@@ -3,6 +3,8 @@ from backend.registry.tools import tool_registry, TOOL_SCHEMAS
 from backend.services.memory import MemorySystem
 from backend.services.validation import SafetyValidator, ValidationResult, HookManager
 from backend.services.sandbox import DockerSandbox, SandboxRunner, execute_in_sandbox
+from backend.agents.resource_controller import ResourceController
+from backend.utils.quantizer import ModelQuantizer
 
 __all__ = [
     'tool_registry',
@@ -13,5 +15,7 @@ __all__ = [
     'HookManager',
     'DockerSandbox',
     'SandboxRunner',
-    'execute_in_sandbox'
+    'execute_in_sandbox',
+    'ResourceController',
+    'ModelQuantizer'
 ]

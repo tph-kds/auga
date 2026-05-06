@@ -378,6 +378,8 @@ async def run_runtime(request: PlayRequest):
             "results": results
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Runtime failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))

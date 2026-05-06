@@ -117,27 +117,32 @@ export default function PhaserGame({ gameType }: { gameType: 'angry_birds' | 'fl
           bird.setDisplaySize(32, 32);
           bird.setIgnoreGravity(true);
 
-          // Build a physics stack precisely placed
+          // Build a physics stack precisely placed to prevent overlapping and collapsing
+          let floorBaseY = h - 40; // Ground top
           for (let i = 0; i < 3; i++) {
-            const yBase = h - 65 - (i * 90);
+            const crateY = floorBaseY - 20;
+            const plankY = floorBaseY - 45;
             
-            const crate1 = this.matter.add.image(550, yBase, 'crate', null, { shape: { type: 'rectangle', width: 40, height: 40 }, friction: 0.8, density: 0.002 });
+            const crate1 = this.matter.add.image(550, crateY, 'crate', null, { shape: { type: 'rectangle', width: 40, height: 40 }, friction: 0.8, density: 0.002 });
             crate1.setDisplaySize(40, 40);
             blocks.push(crate1);
             
-            const crate2 = this.matter.add.image(650, yBase, 'crate', null, { shape: { type: 'rectangle', width: 40, height: 40 }, friction: 0.8, density: 0.002 });
+            const crate2 = this.matter.add.image(650, crateY, 'crate', null, { shape: { type: 'rectangle', width: 40, height: 40 }, friction: 0.8, density: 0.002 });
             crate2.setDisplaySize(40, 40);
             blocks.push(crate2);
             
-            const plank = this.matter.add.image(600, yBase - 25, 'crate', null, { shape: { type: 'rectangle', width: 140, height: 10 }, friction: 0.9, density: 0.003 });
+            const plank = this.matter.add.image(600, plankY, 'crate', null, { shape: { type: 'rectangle', width: 140, height: 10 }, friction: 0.9, density: 0.003 });
             plank.setDisplaySize(140, 10);
             blocks.push(plank);
             
             if (i < 2) {
-              const pig = this.matter.add.image(600, yBase - 45, 'pig', null, { shape: { type: 'circle', radius: 15 }, density: 0.001, restitution: 0.4 });
+              const pigY = floorBaseY - 65;
+              const pig = this.matter.add.image(600, pigY, 'pig', null, { shape: { type: 'circle', radius: 15 }, density: 0.001, restitution: 0.4 });
               pig.setDisplaySize(30, 30);
               pigs.push(pig);
             }
+            
+            floorBaseY -= 50; // Contiguously step floor base upwards
           }
 
         } else if (gameType === 'flappy_birds') {
@@ -240,9 +245,10 @@ export default function PhaserGame({ gameType }: { gameType: 'angry_birds' | 'fl
               };
             }
           } else if (agentStateAB === 'dragging') {
-            // Smoothly simulate mouse drag
-            bird.x += (dragTarget.x - bird.x) * 0.08;
-            bird.y += (dragTarget.y - bird.y) * 0.08;
+            // Smoothly simulate mouse drag with Matter position sync
+            const nextX = bird.x + (dragTarget.x - bird.x) * 0.08;
+            const nextY = bird.y + (dragTarget.y - bird.y) * 0.08;
+            bird.setPosition(nextX, nextY);
             
             // Draw slingshot elastic bands
             graphics.clear();
@@ -294,7 +300,8 @@ export default function PhaserGame({ gameType }: { gameType: 'angry_birds' | 'fl
             // Auto-playing Agent Logic: Flappy Bird
             let closestPipe: any = null;
             let closestDist = 9999;
-            pipes.getChildren().forEach((p: any) => {
+            const activePipes = [...pipes.getChildren()];
+            activePipes.forEach((p: any) => {
               if (p.x > flappyBird.x - 40 && p.x < closestDist && p.isScoreZone) {
                 closestDist = p.x;
                 closestPipe = p;

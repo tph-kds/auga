@@ -4,15 +4,16 @@ from typing import Callable, Tuple, Any
 
 def build_env(environment: str, level: str = "basic") -> Tuple[Any, Callable[[], Any]]:
     """Create environment and a factory for recreating it."""
+    from backend.rl.wrappers import FrameSkipWrapper
     if environment == "FlappyBird-v0":
         from backend.rl.environments import make_flappy_bird
-        return make_flappy_bird(), lambda: make_flappy_bird()
+        return FrameSkipWrapper(make_flappy_bird(), skip=4), lambda: FrameSkipWrapper(make_flappy_bird(), skip=4)
     if environment == "AngryBird-v0":
         from backend.rl.angry_birds_env import make_angry_birds
         # Use rgb_array so VisualAugmentedEnv can capture frames
         return (
-            make_angry_birds(render_mode="rgb_array", level=level),
-            lambda: make_angry_birds(render_mode="rgb_array", level=level),
+            FrameSkipWrapper(make_angry_birds(render_mode="rgb_array", level=level), skip=4),
+            lambda: FrameSkipWrapper(make_angry_birds(render_mode="rgb_array", level=level), skip=4),
         )
 
     import gymnasium as gym

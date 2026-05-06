@@ -108,6 +108,8 @@ class PlannerAgent:
             TrainingPlan object with structured parameters
         """
         user_input = user_input.lower().strip()
+        if not user_input:
+            raise ValueError("Empty user input")
 
         # Extract game type
         game_type = self._detect_environment(user_input)
@@ -288,7 +290,7 @@ class PlannerAgent:
             }
         }
 
-        params = hyperparams.get(algorithm, {}).copy()
+        params = hyperparams.get(algorithm.value, {}).copy()
 
         # Environment-specific tuning
         if game_type in [GameType.FLAPPY_BIRD, GameType.ANGRY_BIRDS]:

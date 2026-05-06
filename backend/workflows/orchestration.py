@@ -352,11 +352,108 @@ class WorkflowOrchestrator:
         return "retry"
 
     def get_status(self) -> Dict[str, Any]:
-        """Get current workflow status."""
+        """Get current workflow status.
+
+        Returns a structured payload that the frontend can render as:
+        - Mission Control / pipeline stage statuses
+        - Resource utilization and adaptive decisions
+        - Alerts and actionable hints
+        """
+
+        # Best-effort phase inference from available artifacts
+        phase = 'idle'
+        if getattr(self.trainer, 'env', None) is not None:
+            phase = 'collecting'
+        if getattr(self.trainer, 'model', None) is not None:
+            phase = 'training'
+        if getattr(self, 'current_state', None) is not None and isinstance(self.current_state, dict):
+            if self.current_state.get('evaluation_complete'):
+                phase = 'evaluating'
+            if self.current_state.get('runtime_complete'):
+                phase = 'done' if self.current_state.get('success') else 'failed'
+
+        # Runtime controller stats (episodes)
+        controller_stats = self.controller.get_progress_stats()
+
+        # Resource snapshot (from resource controller if needed; controller stats may not include RAM/VRAM)
+        resources = {}
+        try:
+            from backend.agents.resource_controller import ResourceController
+            rc = ResourceController()
+            resources = rc.get_system_stats()
+        except Exception:
+            resources = {
+                'ram_percent': None,
+                'cpu_percent': None,
+                'vram_percent': None,
+            }
+
+        # Alerting based on resource thresholds
+        alerts = []
+        try:
+            v = float(resources.get('vram_percent') or 0)
+            r = float(resources.get('ram_percent') or 0)
+            if v > 95.0:
+                alerts.append({'severity': 'critical', 'title': 'VRAM overload', 'message': 'VRAM is critically high. Prefer CPU/offload / tiny policy.'})
+            elif v > 85.0:
+                alerts.append({'severity': 'high', 'title': 'VRAM pressure', 'message': 'VRAM is elevated. Reduce batch size / resolution / evaluation frequency.'})
+
+            if r > 95.0:
+                alerts.append({'severity': 'critical', 'title': 'RAM overload', 'message': 'RAM spike detected. Reduce replay buffer / workers.'})
+            elif r > 85.0:
+                alerts.append({'severity': 'high', 'title': 'RAM pressure', 'message': 'RAM is elevated. Consider smaller replay / fewer parallel environments.'})
+        except Exception:
+            pass
+
+        steps = [
+            {
+                'id': 'collect',
+                'label': 'Data Collection',
+                'icon': '🎮',
+                'status': 'done' if phase not in ['idle', 'collecting'] else ('active' if phase == 'collecting' else 'pending'),
+                'progress': 0.0,
+            },
+            {
+                'id': 'filter',
+                'label': 'Data Filtering',
+                'icon': '🔍',
+                'status': 'done' if phase in ['evaluating', 'done', 'failed', 'training'] else ('active' if phase == 'filtering' else 'pending'),
+                'progress': 0.0,
+            },
+            {
+                'id': 'train',
+                'label': 'Training',
+                'icon': '🧠',
+                'status': 'active' if phase == 'training' else ('done' if phase in ['evaluating', 'done', 'failed'] else 'pending'),
+                'progress': 0.0,
+            },
+            {
+                'id': 'evaluate',
+                'label': 'Evaluation',
+                'icon': '📊',
+                'status': 'active' if phase == 'evaluating' else ('done' if phase in ['done', 'failed'] else 'pending'),
+                'progress': 0.0,
+            },
+            {
+                'id': 'deploy',
+                'label': 'Deployment',
+                'icon': '🚀',
+                'status': 'done' if phase in ['done'] else ('error' if phase == 'failed' else 'pending'),
+                'progress': 0.0,
+            },
+        ]
+
         return {
-            'controller': self.controller.get_progress_stats(),
+            'phase': phase,
+            'pipeline': {
+                'steps': steps,
+                'alerts': alerts,
+            },
+            'controller': controller_stats,
             'trainer': {
                 'model_loaded': self.trainer.model is not None,
-                'config': self.trainer.config
-            }
+                'config': self.trainer.config,
+            },
+            'resources': resources,
         }
+
