@@ -65,3 +65,52 @@ class SSEStatusEvent(BaseModel):
     event: str  # "progress", "complete", "error"
     data: Dict[str, Any]
     timestamp: str
+
+
+class UploadGameRequest(BaseModel):
+    """Request model for uploading a game codebase (ZIP)."""
+    # This is a placeholder for multipart endpoint; file arrives via FastAPI UploadFile
+    user_goal: str = Field(..., description="Natural language goal for training this uploaded game")
+    max_iterations: int = Field(3, description="Maximum retry iterations")
+    enable_curriculum: bool = Field(True, description="Enable curriculum learning")
+    callback_url: Optional[str] = Field(None, description="Webhook URL for async completion")
+
+
+class JobStage(BaseModel):
+    id: str
+    label: Optional[str] = None
+    status: str  # pending|active|done|error
+    retry_count: int = 0
+    detail: Optional[str] = None
+
+
+class PipelineStep(BaseModel):
+    id: str
+    label: Optional[str] = None
+    status: str
+    retry_count: int = 0
+    detail: Optional[str] = None
+
+
+class PipelineStatus(BaseModel):
+    phase: str
+    steps: list[PipelineStep]
+    alerts: list[Dict[str, Any]] = Field(default_factory=list)
+
+
+class JobStatusResponse(BaseModel):
+    job_id: str
+    status: str  # running|completed|failed (or internal labels)
+    pipeline: Optional[PipelineStatus] = None
+    controller: Optional[Dict[str, Any]] = None
+    resources: Optional[Dict[str, Any]] = None
+    trainer: Optional[Dict[str, Any]] = None
+    details: Dict[str, Any] = Field(default_factory=dict)
+
+
+class SSEJobStatusPayload(BaseModel):
+    workflow_id: str
+    job: Dict[str, Any]
+    status: JobStatusResponse
+
+

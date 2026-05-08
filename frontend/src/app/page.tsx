@@ -19,13 +19,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 
-const PIPELINE_STAGES = [
-  { id: 'collect',  label: 'Data Collect',  icon: '🎮' },
-  { id: 'filter',   label: 'Filter',        icon: '🔍' },
-  { id: 'train',    label: 'Train',         icon: '🧠' },
-  { id: 'evaluate', label: 'Evaluate',      icon: '📊' },
-  { id: 'infer',    label: 'Inference',     icon: '🚀' },
-];
+
 
 export default function AgentDashboard() {
   const { workflowDetails, activeWorkflowId, workflowStatus, isConnected, recentPlans, models } = useApp();
@@ -40,25 +34,19 @@ export default function AgentDashboard() {
   type StageStatus = 'pending' | 'active' | 'done' | 'error';
 
   const getPipelineStages = () => {
-    if (!activeWorkflowId) return undefined;
+    const steps = (workflowDetails as any)?.pipeline?.steps;
+    if (!activeWorkflowId || !Array.isArray(steps)) return undefined;
 
-    const stages: Array<{ id: string; label: string; icon: string; status: StageStatus }> =
-      PIPELINE_STAGES.map(s => ({ ...s, status: 'pending' as StageStatus }));
+    return steps.map((s: any) => ({
+      id: s.id,
+      label: s.label,
+      icon: s.icon ?? '⚙️',
+      status: (s.status as StageStatus) ?? 'pending',
+      retry_count: s.retry_count,
+      detail: s.detail,
+    }));
+  }; 
 
-    if (workflowStatus === 'running') {
-      stages[0].status = 'done';
-      stages[1].status = 'done';
-      stages[2].status = 'active';
-    } else if (workflowStatus === 'completed') {
-      stages.forEach(s => { s.status = 'done'; });
-    } else if (workflowStatus === 'failed') {
-      stages[0].status = 'done';
-      stages[1].status = 'done';
-      stages[2].status = 'error';
-    }
-
-    return stages;
-  };
 
   return (
     <div className="space-y-6">

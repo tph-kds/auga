@@ -61,12 +61,14 @@ workflow_results: Dict[str, Dict] = {}
 
 # Background task function
 async def run_workflow_background(workflow_id: str, request: GoalRequest):
+
     """Run workflow in background and store results."""
     try:
         config = WorkflowConfig(
             max_iterations=request.max_iterations,
             enable_curriculum=request.enable_curriculum
         )
+
 
         orchestrator = WorkflowOrchestrator(config=config)
         active_workflows[workflow_id] = orchestrator
@@ -217,20 +219,68 @@ async def status_stream(workflow_id: str):
     async def event_generator():
         while True:
             if workflow_id in workflow_results:
+
+                orchestrator_job_id = "default"
+                try:
+                    orch = active_workflows.get(workflow_id)
+                    if orch and getattr(orch, 'current_state', None):
+                        orchestrator_job_id = orch.current_state.get('job_id', 'default')
+                except Exception:
+                    pass
+
                 event = {
                     "event": "complete",
-                    "data": workflow_results[workflow_id],
+                    "data": {
+                        "workflow_id": workflow_id,
+                        "job": {"job_id": orchestrator_job_id},
+                        "status": "completed",
+                        "details": active_workflows[workflow_id].get_status() if workflow_id in active_workflows else None,
+                        "results": workflow_results[workflow_id],
+                    },
                     "timestamp": datetime.now().isoformat()
                 }
+
+
                 yield f"data: {json.dumps(event, default=str)}\n\n"
                 break
             elif workflow_id in active_workflows:
-                status = active_workflows[workflow_id].get_status()
+                orchestrator = active_workflows[workflow_id]
+                status = orchestrator.get_status()
+                job_id = "default"
+                try:
+                    job_id = orchestrator.current_state.get('job_id', 'default') if getattr(orchestrator, 'current_state', None) else 'default'
+                except Exception:
+                    pass
+
+                # Stage-driven mission-control payload.
+                # Frontend expects `status.pipeline.steps`.
                 event = {
                     "event": "progress",
-                    "data": status,
-                    "timestamp": datetime.now().isoformat()
+                    "data": {
+                        "job_id": job_id,
+                        "workflow_id": workflow_id,
+                        "status": {
+                            "job_id": job_id,
+                            "pipeline": status.get("pipeline"),
+                            "controller": status.get("controller"),
+                            "resources": status.get("resources"),
+                            "trainer": status.get("trainer"),
+                            "status": "running",
+                            "details": {},
+                        },
+                        "alerts": status.get("pipeline", {}).get("alerts", []),
+                        "job_outputs": {
+                            "game_signature": None,
+                            "env_signature": None,
+                            "deployed_model_id": None,
+                        },
+                    },
+                    "timestamp": datetime.now().isoformat(),
                 }
+
+
+
+
                 yield f"data: {json.dumps(event, default=str)}\n\n"
             else:
                 event = {

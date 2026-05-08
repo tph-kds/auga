@@ -24,19 +24,46 @@ export default function MonitorPanel() {
   const isLowVram = vramPercent > 85;
   const isHighRam = ramPercent > 85;
 
-  const stageFromController = (() => {
+  const pipelineSteps = (workflowDetails as any)?.pipeline?.steps;
+
+  const activeStage = (() => {
+    if (!Array.isArray(pipelineSteps)) return null;
+    return pipelineSteps.find((s: any) => s.status === 'active') ?? null;
+  })();
+
+  const failedStage = (() => {
+    if (!Array.isArray(pipelineSteps)) return null;
+    return pipelineSteps.find((s: any) => s.status === 'error' || s.status === 'failed') ?? null;
+  })();
+
+  const doneStage = (() => {
+    if (!Array.isArray(pipelineSteps)) return false;
+    return pipelineSteps.every((s: any) => s.status === 'completed' || s.status === 'done');
+  })();
+
+  const stageFromStages = (() => {
     if (!activeWorkflowId) return 'idle';
-    if (workflowStatus === 'completed') return 'done';
-    if (workflowStatus === 'failed') return 'error';
-    return 'active';
+    if (failedStage) return 'error';
+    if (doneStage) return 'done';
+    if (activeStage) return 'active';
+    return 'idle';
   })();
 
   const progress = (() => {
-    // Controller progress is currently episode-based; map to a rough 0-100 for UI
+    if (Array.isArray(pipelineSteps) && pipelineSteps.length > 0) {
+      const doneCount = pipelineSteps.filter((s: any) => s.status === 'completed' || s.status === 'done').length;
+      const activeCount = pipelineSteps.filter((s: any) => s.status === 'active').length;
+      const pct = ((doneCount + activeCount * 0.5) / pipelineSteps.length) * 100;
+      return Math.max(0, Math.min(100, Math.round(pct)));
+    }
+
     const total = controller?.total_episodes_played;
     if (typeof total !== 'number') return 0;
     return Math.max(0, Math.min(100, Math.round((total / 50) * 100)));
   })();
+
+
+
 
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-900 rounded-xl shadow-lg border">
